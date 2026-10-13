@@ -2,7 +2,7 @@ from pathlib import Path
 from threading import RLock
 import uuid
 
-from PIL import Image, ImageDraw, UnidentifiedImageError
+from PIL import Image, ImageDraw, ImageFont, UnidentifiedImageError
 import torch
 
 from .gradcam_service import CLASS_NAMES, MODEL_LOCK, get_model
@@ -25,17 +25,23 @@ def _draw_annotations(image, prediction):
             coordinates = [round(value) for value in box.xyxy[0].tolist()]
             draw.rectangle(coordinates, outline=CLASS_INFO[class_id]['color'], width=3)
 
-    padding = 12
-    row_height = 24
-    legend_width = 205
+    padding = 22
+    row_height = 42
+    legend_width = 360
     legend_height = padding * 2 + row_height * len(CLASS_INFO)
     left = annotated.width - legend_width - 12
     top = 12
-    draw.rectangle((left, top, annotated.width - 12, top + legend_height), fill=(255, 255, 255))
+    draw.rounded_rectangle((left, top, annotated.width - 12, top + legend_height), radius=14, fill=(255, 255, 255), outline=(210, 220, 230), width=2)
+    try:
+        font = ImageFont.truetype('DejaVuSans.ttf', 24)
+    except OSError:
+        font = ImageFont.load_default()
     for row, info in enumerate(CLASS_INFO.values()):
-        y = top + padding + row * row_height + 5
-        draw.rectangle((left + padding, y, left + padding + 14, y + 14), fill=info['color'])
-        draw.text((left + padding + 23, y - 2), f"{info['short']} - {info['name']}", fill=(25, 35, 45))
+        center_x = left + padding + 12
+        center_y = top + padding + row * row_height + row_height // 2
+        dot_radius = 9
+        draw.ellipse((center_x - dot_radius, center_y - dot_radius, center_x + dot_radius, center_y + dot_radius), fill=info['color'], outline=(25, 35, 45), width=1)
+        draw.text((left + padding + 34, center_y - 14), f"{info['short']} · {info['name']}", fill=(25, 35, 45), font=font)
     return annotated
 
 

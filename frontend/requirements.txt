@@ -1,0 +1,6 @@
+# This frontend uses npm, not pip.
+# Install the exact locked dependencies with:
+# npm ci
+#
+# Start the development server with:
+# npm run dev

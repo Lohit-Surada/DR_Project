@@ -1,7 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { useAuth } from './AuthContext';
 import { saveAnalysis, subscribeToUserAnalyses } from '../services/analysisStore';
-import { classifyImage, generateGradCAM } from '../services/api';
+import { classifyImage, detectLesions, generateGradCAM } from '../services/api';
+import { getRecoveryGuidance } from '../services/guidanceApi';
 
 const AnalysisContext = createContext(null);
 
@@ -16,6 +17,9 @@ export function AnalysisProvider({ children }) {
   const [gradCamCombined, setGradCamCombined] = useState('');
   const [gradCamStatus, setGradCamStatus] = useState('idle');
   const [gradCamError, setGradCamError] = useState('');
+  const [guidanceResult, setGuidanceResult] = useState(null);
+  const [guidanceStatus, setGuidanceStatus] = useState('idle');
+  const [guidanceError, setGuidanceError] = useState('');
   const [reportAvailable, setReportAvailable] = useState(false);
   const [analysisHistory, setAnalysisHistory] = useState([]);
   const [historyError, setHistoryError] = useState('');
@@ -49,11 +53,32 @@ export function AnalysisProvider({ children }) {
     setGradCamCombined('');
     setGradCamStatus('classifying');
     setGradCamError('');
+    setGuidanceResult(null);
+    setGuidanceStatus('loading');
+    setGuidanceError('');
     setReportAvailable(false);
 
-    const result = await classifyImage(file);
+    const [result, lesions] = await Promise.all([
+      classifyImage(file),
+      detectLesions(file),
+    ]);
     setClassificationResult(result);
+    setLesionResult(lesions.result);
     setReportAvailable(true);
+
+    const isNoDr = result.label === 'No DR' || result.title === 'No diabetic retinopathy' || result.severity === 'No DR';
+    if (isNoDr) {
+      setGuidanceResult({ tips: [], medications: [] });
+      setGuidanceStatus('not_required');
+    } else {
+      try {
+        setGuidanceResult(await getRecoveryGuidance(result));
+        setGuidanceStatus('ready');
+      } catch (error) {
+        setGuidanceStatus('error');
+        setGuidanceError(error.message || 'Educational guidance is temporarily unavailable.');
+      }
+    }
 
     setGradCamStatus('generating');
     let visualization;
@@ -107,6 +132,9 @@ export function AnalysisProvider({ children }) {
     setGradCamCombined('');
     setGradCamStatus('idle');
     setGradCamError('');
+    setGuidanceResult(null);
+    setGuidanceStatus('idle');
+    setGuidanceError('');
   }, [imagePreview]);
 
   const value = useMemo(
@@ -120,6 +148,9 @@ export function AnalysisProvider({ children }) {
       gradCamCombined,
       gradCamStatus,
       gradCamError,
+      guidanceResult,
+      guidanceStatus,
+      guidanceError,
       reportAvailable,
       analysisHistory,
       historyError,
@@ -130,7 +161,7 @@ export function AnalysisProvider({ children }) {
       setGradCamResults,
       setReportAvailable,
     }),
-    [uploadedImage, imageName, imagePreview, classificationResult, lesionResult, gradCamResults, gradCamCombined, gradCamStatus, gradCamError, reportAvailable, analysisHistory, historyError, setImageFile, clearImage],
+    [uploadedImage, imageName, imagePreview, classificationResult, lesionResult, gradCamResults, gradCamCombined, gradCamStatus, gradCamError, guidanceResult, guidanceStatus, guidanceError, reportAvailable, analysisHistory, historyError, setImageFile, clearImage],
   );
 
   return <AnalysisContext.Provider value={value}>{children}</AnalysisContext.Provider>;

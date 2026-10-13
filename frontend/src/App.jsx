@@ -8,6 +8,8 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import Classification from './pages/Classification';
 import GradCAM from './pages/GradCAM';
 import Home from './pages/Home';
+import History from './pages/History';
+import HowItWorks from './pages/HowItWorks';
 import LesionDetection from './pages/LesionDetection';
 import Login from './pages/Login';
 import MedicalReportPreview from './pages/MedicalReportPreview';
@@ -44,6 +46,22 @@ function AppShell() {
             element={
               <ProtectedRoute>
                 <Profile />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/history"
+            element={
+              <ProtectedRoute>
+                <History />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/how-it-works"
+            element={
+              <ProtectedRoute>
+                <HowItWorks />
               </ProtectedRoute>
             }
           />

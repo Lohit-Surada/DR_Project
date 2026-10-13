@@ -3,11 +3,11 @@
 @tailwind utilities;
 
 :root {
-  font-family: Inter, 'Segoe UI', sans-serif;
+  font-family: 'Plus Jakarta Sans', 'Segoe UI', sans-serif;
   line-height: 1.5;
   font-weight: 400;
   color: #0f172a;
-  background-color: #f8fbff;
+  background-color: #f6f9fc;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -21,7 +21,7 @@ html {
 body {
   margin: 0;
   min-width: 320px;
-  background: #f8fbff;
+  background: #f6f9fc;
   color: #0f172a;
 }
 
@@ -41,14 +41,26 @@ input {
 
 @layer components {
   .medical-card {
-    @apply rounded-[28px] border border-slate-200 bg-white shadow-[0_10px_30px_rgba(15,23,42,0.04)];
+    @apply rounded-2xl border border-slate-200/80 bg-white shadow-[0_12px_34px_rgba(15,39,71,0.06)];
   }
 
   .section-label {
-    @apply text-xs font-semibold uppercase tracking-[0.14em] text-sky-700;
+    @apply text-[11px] font-bold uppercase tracking-[0.16em] text-sky-700;
   }
 
   .input-field {
     @apply w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-800 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-sky-400 focus:ring-2 focus:ring-sky-100;
+  }
+
+  .primary-button {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-[#1677FF] px-5 py-3 text-sm font-semibold text-white shadow-[0_10px_20px_rgba(22,119,255,0.18)] transition duration-200 hover:-translate-y-0.5 hover:bg-[#0868ed] focus:outline-none focus:ring-2 focus:ring-[#1677FF] focus:ring-offset-2 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none;
+  }
+
+  .secondary-button {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-[#0F2747] transition duration-200 hover:-translate-y-0.5 hover:border-sky-200 hover:bg-sky-50 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2;
+  }
+
+  .eyebrow {
+    @apply inline-flex items-center gap-2 rounded-full border border-sky-200 bg-sky-50 px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-sky-700;
   }
 }

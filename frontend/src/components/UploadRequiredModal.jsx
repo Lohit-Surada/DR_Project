@@ -1,6 +1,6 @@
 import { UploadCloud, X } from 'lucide-react';
 
-export default function UploadRequiredModal({ isOpen, onClose, onUploadImage }) {
+export default function UploadRequiredModal({ isOpen, onClose, onUploadImage, featureName }) {
   if (!isOpen) {
     return null;
   }
@@ -24,7 +24,7 @@ export default function UploadRequiredModal({ isOpen, onClose, onUploadImage }) 
 
         <h2 className="text-2xl font-semibold text-slate-900">Upload a Fundus Image</h2>
         <p className="mt-3 text-sm leading-6 text-slate-600">
-          Please upload a retinal fundus image before using this feature.
+          {featureName ? `Upload an image to open ${featureName}.` : 'Please upload a retinal fundus image before using this feature.'}
         </p>
 
         <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-end">

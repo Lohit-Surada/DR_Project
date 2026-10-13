@@ -21,7 +21,7 @@ async function authHeaders() {
   };
 }
 
-export async function createReport({ image, classification, lesions, gradcam }) {
+export async function createReport({ image, classification, lesions, guidance, gradcam, profile }) {
   const formData = new FormData();
   formData.append('image', image);
   formData.append('payload', JSON.stringify({
@@ -30,6 +30,7 @@ export async function createReport({ image, classification, lesions, gradcam }) 
       ...lesions,
       image_path: lesions.image_url,
     },
+    guidance: guidance || { tips: [], medications: [] },
     gradcam: {
       ...gradcam,
       combined_path: gradcam.combined,
@@ -37,6 +38,14 @@ export async function createReport({ image, classification, lesions, gradcam }) 
     metadata: {
       generated_at: new Date().toISOString(),
       model: 'RetinaIQ CNN + YOLO26 analysis pipeline',
+      profile: Object.fromEntries(
+        Object.entries({
+          full_name: profile?.fullName,
+          email: profile?.email,
+          phone: profile?.phone,
+          date_of_birth: profile?.dateOfBirth,
+        }).filter(([, value]) => value !== undefined && value !== null && String(value).trim() !== ''),
+      ),
     },
   }));
   const response = await fetch(`${VITE_API_BASE_URL}/api/reports/`, {

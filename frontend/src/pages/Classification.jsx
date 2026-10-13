@@ -2,6 +2,7 @@ import { ArrowLeft } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import ClassificationResult from '../components/ClassificationResult';
 import ImagePreview from '../components/ImagePreview';
+import RecoveryGuidance from '../components/RecoveryGuidance';
 import { useAnalysis } from '../context/AnalysisContext';
 
 export default function Classification() {
@@ -31,6 +32,7 @@ export default function Classification() {
 
         <ClassificationResult result={classificationResult} />
       </div>
+      <RecoveryGuidance classification={classificationResult} />
     </div>
   );
 }

@@ -77,19 +77,30 @@ class MedicalReportGenerator:
         metadata = self.payload.get('metadata', {})
         classification = self.payload.get('classification', {})
         lesions = self.payload.get('lesions', {})
+        profile = metadata.get('profile') or {}
+        profile_labels = [
+            ('full_name', 'Full name'),
+            ('email', 'Email'),
+            ('phone', 'Phone'),
+            ('date_of_birth', 'Date of birth'),
+        ]
+        profile_rows = [['User profile', 'Value']]
+        for key, label in profile_labels:
+            value = profile.get(key)
+            if value is not None and str(value).strip():
+                profile_rows.append([label, str(value)])
+
         self.story.extend([
             Paragraph('DIABETIC RETINOPATHY<br/>AI ANALYSIS REPORT', self.title_style),
             Paragraph('AI-Assisted Retinal Image Analysis', self.body_style),
-            self._table([
-                ['Report metadata', 'Value'],
-                ['Report ID', str(self.report.id)],
-                ['Generated', str(metadata.get('generated_at', self.report.created_at.isoformat()))],
-                ['Uploaded image', self.report.image_name],
-                ['Model', str(metadata.get('model', 'AI analysis pipeline'))],
-            ]),
-            Spacer(1, 10),
-            Paragraph('ORIGINAL FUNDUS IMAGE', self.section_style),
         ])
+        if len(profile_rows) > 1:
+            self.story.extend([
+                Paragraph('USER PROFILE', self.section_style),
+                self._table(profile_rows),
+                Spacer(1, 10),
+            ])
+        self.story.append(Paragraph('ORIGINAL FUNDUS IMAGE', self.section_style))
         original = self._image(self.report.image.name, max_height=90 * mm)
         if original:
             self.story.append(original)
@@ -139,10 +150,32 @@ class MedicalReportGenerator:
                 panel_image = self._image(panel.get('image', ''), max_height=52 * mm)
                 if panel_image:
                     self.story.extend([Paragraph(str(panel.get('title', 'Visualization')), self.body_style), panel_image, Spacer(1, 6)])
+
+        guidance = self.payload.get('guidance') or {}
+        guidance_tips = [str(tip).strip() for tip in guidance.get('tips', []) if str(tip).strip()][:3]
+        medication_rows = [['Medicine reference', 'Category']]
+        for medication in guidance.get('medications', [])[:3]:
+            name = str(medication.get('name', '')).strip()
+            category = str(medication.get('category', '')).strip()
+            if name and category:
+                medication_rows.append([name, category])
+        self.story.extend([PageBreak(), Paragraph('4. RECOVERY & PREVENTION GUIDANCE', self.section_style)])
+        if guidance_tips:
+            self.story.append(Paragraph('Three concise educational priorities based on the AI-assisted classification:', self.body_style))
+            self.story.append(self._table([[f'{index}.', tip] for index, tip in enumerate(guidance_tips, 1)]))
+        else:
+            self.story.append(Paragraph('No recovery guidance is required for this classification. Continue routine eye examinations and general prevention care.', self.body_style))
+        if len(medication_rows) > 1:
+            self.story.extend([
+                Spacer(1, 10),
+                Paragraph('Medicine names for clinician discussion', self.body_style),
+                self._table(medication_rows),
+                Paragraph('These are reference names only, not prescriptions. Treatment decisions must be made by a qualified clinician.', self.small_style),
+            ])
         self.story.extend([
             Spacer(1, 12),
-            Paragraph('MEDICAL DISCLAIMER', self.section_style),
-            Paragraph('This report contains AI-generated analysis intended for research and educational purposes. It is not a medical diagnosis and should not replace evaluation by a qualified healthcare professional.<br/><br/>AI-generated visualizations such as Grad-CAM highlight regions contributing to model predictions and do not independently confirm the presence or absence of a retinal lesion.', self.disclaimer_style),
+            Paragraph('SAFETY NOTE', self.section_style),
+            Paragraph('AI-generated analysis is educational and does not diagnose, prescribe, or confirm a cure. Seek urgent eye care for sudden vision loss, severe eye pain, or major new flashes and floaters.', self.disclaimer_style),
         ])
         output = BytesIO()
         document = SimpleDocTemplate(output, pagesize=A4, rightMargin=18 * mm, leftMargin=18 * mm, topMargin=18 * mm, bottomMargin=18 * mm, title='Diabetic Retinopathy AI Analysis Report')

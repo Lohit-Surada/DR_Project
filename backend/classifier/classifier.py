@@ -6,7 +6,18 @@ from PIL import Image
 from tensorflow.keras.models import load_model
 
 
-MODEL_PATH = Path(__file__).resolve().parent.parent / 'model' / 'best_aptos_cnn.keras'
+BACKEND_DIR = Path(__file__).resolve().parent.parent
+MODEL_PATH = next(
+    (
+        path for path in (
+            BACKEND_DIR / 'dr_classification' / 'best_aptos_cnn.keras',
+            BACKEND_DIR / 'best_aptos_cnn.keras',
+            BACKEND_DIR / 'model' / 'best_aptos_cnn.keras',
+        )
+        if path.exists()
+    ),
+    BACKEND_DIR / 'dr_classification' / 'best_aptos_cnn.keras',
+)
 ALLOWED_EXTENSIONS = {'jpg', 'jpeg', 'png', 'webp'}
 CLASS_NAMES = [
     'No diabetic retinopathy',
@@ -32,7 +43,11 @@ def get_model():
     if MODEL is None:
         with MODEL_LOCK:
             if MODEL is None:
-                MODEL = load_model(MODEL_PATH)
+                if not MODEL_PATH.exists():
+                    raise FileNotFoundError(
+                        f'DR classification model not found. Restore best_aptos_cnn.keras at {MODEL_PATH}.'
+                    )
+                MODEL = load_model(MODEL_PATH, compile=False)
     return MODEL
 
 

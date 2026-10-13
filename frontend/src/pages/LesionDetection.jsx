@@ -4,6 +4,13 @@ import { Link } from 'react-router-dom';
 import { useAnalysis } from '../context/AnalysisContext';
 import { detectLesions } from '../services/api';
 
+const lesionMeta = {
+  0: { label: 'Microaneurysm', color: '#dc2626' },
+  1: { label: 'Haemorrhage', color: '#2563eb' },
+  2: { label: 'Hard Exudate', color: '#16a34a' },
+  3: { label: 'Soft Exudate', color: '#eab308' },
+};
+
 export default function LesionDetection() {
   const { uploadedImage, setLesionResult } = useAnalysis();
   const [result, setResult] = useState(null);
@@ -80,7 +87,7 @@ export default function LesionDetection() {
           <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {Object.entries(result.summary).map(([classId, values]) => (
               <div key={classId} className="medical-card p-5">
-                <p className="text-sm text-slate-500">{['Microaneurysm', 'Haemorrhage', 'Hard Exudate', 'Soft Exudate'][classId]}</p>
+                <p className="flex items-center gap-2 text-sm text-slate-500"><span className="inline-block h-3 w-3 rounded-full ring-2 ring-white shadow-sm" style={{ backgroundColor: lesionMeta[classId].color }} aria-hidden="true" />{lesionMeta[classId].label}</p>
                 <p className="mt-2 text-2xl font-semibold text-slate-900">{values.count}</p>
                 <p className="mt-1 text-xs text-slate-500">Highest confidence: {(values.highest * 100).toFixed(1)}%</p>
               </div>

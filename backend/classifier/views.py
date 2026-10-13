@@ -1,3 +1,4 @@
+import json
 import logging
 import time
 
@@ -6,6 +7,7 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 
 from .classifier import ALLOWED_EXTENSIONS, classify_image
+from .guidance_service import generate_guidance
 from .gradcam_service import generate_visualization
 from .lesion_service import generate_lesion_detection
 
@@ -39,10 +41,35 @@ def classify(request):
 
     try:
         result = classify_image(uploaded_file)
+    except FileNotFoundError:
+        LOGGER.exception('DR classification model is unavailable.')
+        return add_cors_headers(JsonResponse({'error': 'The DR classification model is unavailable. Restore best_aptos_cnn.keras in the backend model folder.'}, status=503))
     except (OSError, ValueError):
         return add_cors_headers(JsonResponse({'error': 'That file could not be read as an image. Try another retinal photograph.'}, status=400))
 
     return add_cors_headers(JsonResponse(result))
+
+
+@csrf_exempt
+def guidance(request):
+    if request.method == 'OPTIONS':
+        return add_cors_headers(JsonResponse({}, status=204))
+    if request.method != 'POST':
+        return add_cors_headers(JsonResponse({'error': 'Use POST with classification data.'}, status=405))
+
+    try:
+        payload = request.body.decode('utf-8') or '{}'
+        classification = json.loads(payload)
+    except (TypeError, UnicodeDecodeError, json.JSONDecodeError):
+        return add_cors_headers(JsonResponse({'error': 'The classification data is invalid.'}, status=400))
+
+    try:
+        result = generate_guidance(classification)
+    except Exception:
+        LOGGER.exception('Personalized guidance generation failed.')
+        return add_cors_headers(JsonResponse({'error': 'Educational guidance is temporarily unavailable.'}, status=503))
+
+    return add_cors_headers(JsonResponse({'success': True, **result}))
 
 
 @csrf_exempt
@@ -57,9 +84,9 @@ def gradcam(request):
         return add_cors_headers(JsonResponse({'error': 'No image was uploaded.'}, status=400))
 
     extension = uploaded_file.name.rsplit('.', 1)[-1].lower() if '.' in uploaded_file.name else ''
-    if extension not in {'jpg', 'jpeg', 'png'}:
-        return add_cors_headers(JsonResponse({'error': 'Use a JPG, JPEG, or PNG image.'}, status=400))
-    if uploaded_file.content_type not in {'image/jpeg', 'image/jpg', 'image/png'}:
+    if extension not in ALLOWED_EXTENSIONS:
+        return add_cors_headers(JsonResponse({'error': 'Use a JPG, JPEG, PNG, or WEBP image.'}, status=400))
+    if uploaded_file.content_type not in {'image/jpeg', 'image/jpg', 'image/png', 'image/webp'}:
         return add_cors_headers(JsonResponse({'error': 'The uploaded file is not a supported image.'}, status=400))
     if uploaded_file.size > 12 * 1024 * 1024:
         return add_cors_headers(JsonResponse({'error': 'That image is larger than 12 MB.'}, status=413))
@@ -99,9 +126,9 @@ def lesions(request):
         return add_cors_headers(JsonResponse({'error': 'No image was uploaded.'}, status=400))
 
     extension = uploaded_file.name.rsplit('.', 1)[-1].lower() if '.' in uploaded_file.name else ''
-    if extension not in {'jpg', 'jpeg', 'png'}:
-        return add_cors_headers(JsonResponse({'error': 'Use a JPG, JPEG, or PNG image.'}, status=400))
-    if uploaded_file.content_type not in {'image/jpeg', 'image/jpg', 'image/png'}:
+    if extension not in ALLOWED_EXTENSIONS:
+        return add_cors_headers(JsonResponse({'error': 'Use a JPG, JPEG, PNG, or WEBP image.'}, status=400))
+    if uploaded_file.content_type not in {'image/jpeg', 'image/jpg', 'image/png', 'image/webp'}:
         return add_cors_headers(JsonResponse({'error': 'The uploaded file is not a supported image.'}, status=400))
     if uploaded_file.size > 12 * 1024 * 1024:
         return add_cors_headers(JsonResponse({'error': 'That image is larger than 12 MB.'}, status=413))
