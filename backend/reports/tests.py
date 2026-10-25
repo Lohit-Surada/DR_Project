@@ -48,3 +48,31 @@ class ReportApiTests(TestCase):
         self.assertIn('inline', view_response['Content-Disposition'])
         self.assertIn('attachment', download_response['Content-Disposition'])
         self.assertEqual(b''.join(view_response.streaming_content), b''.join(download_response.streaming_content))
+
+    @patch('reports.views._owner', return_value='user-a')
+    def test_report_with_expanded_user_profile(self, owner):
+        payload = {
+            **self.payload,
+            'gradcam': {'combined_path': '/media/missing.png'},
+            'metadata': {
+                'report_date': 'October 18, 2026',
+                'profile': {
+                    'full_name': 'John Doe',
+                    'age': '38',
+                    'sex': 'Male',
+                    'dob': '1988-08-20',
+                    'email': 'johndoe@example.com',
+                    'contact_no': '+19876543210',
+                    'address': '456 Retinal Way, Vision City',
+                    'blood_group': 'B+',
+                },
+            },
+        }
+        create_response = self.client.post('/api/reports/', {'image': self._image(), 'payload': json.dumps(payload)})
+        self.assertEqual(create_response.status_code, 200)
+        analysis_id = create_response.json()['analysis_id']
+
+        view_response = self.client.get(f'/api/reports/{analysis_id}/view/')
+        self.assertEqual(view_response.status_code, 200)
+        pdf_bytes = b''.join(view_response.streaming_content)
+        self.assertTrue(pdf_bytes.startswith(b'%PDF'))

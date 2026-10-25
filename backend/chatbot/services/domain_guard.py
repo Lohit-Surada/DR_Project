@@ -11,7 +11,8 @@ def classify_topic(message, history=()):
     text = message.strip().lower()
     if not text:
         return 'blocked'
-    has_allowed = any(term in text for term in ALLOWED_TERMS)
+    has_dr_abbreviation = bool(re.search(r'\b(dr|npdr|pdr)\b', text))
+    has_allowed = any(term in text for term in ALLOWED_TERMS) or has_dr_abbreviation
     has_medical_context = bool(MEDICAL_CONTEXT.search(text))
     has_blocked_intent = bool(BLOCKED_INTENTS.search(text))
     if has_blocked_intent and not has_medical_context and not has_allowed:

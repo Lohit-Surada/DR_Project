@@ -5,7 +5,7 @@ import uuid
 from pathlib import Path
 
 from flask import Flask, flash, redirect, render_template, request, send_from_directory, url_for
-from PIL import Image, ImageDraw, UnidentifiedImageError
+from PIL import Image, ImageDraw, ImageFont, UnidentifiedImageError
 from werkzeug.utils import secure_filename
 import torch
 from ultralytics import YOLO
@@ -138,27 +138,111 @@ def predict():
     )
 
 
+def _load_legend_font(size: int):
+    candidates = [
+        'arialbd.ttf',
+        'Arial-Bold.ttf',
+        'segoeuib.ttf',
+        'C:/Windows/Fonts/arialbd.ttf',
+        'C:/Windows/Fonts/segoeuib.ttf',
+        'C:/Windows/Fonts/arial.ttf',
+        'C:/Windows/Fonts/segoeui.ttf',
+        'arial.ttf',
+        'segoeui.ttf',
+        'DejaVuSans-Bold.ttf',
+        'DejaVuSans.ttf',
+        'LiberationSans-Bold.ttf',
+        '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
+        '/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf',
+        '/System/Library/Fonts/HelveticaNeue.ttc',
+        '/Library/Fonts/Arial.ttf',
+        'Helvetica.ttc',
+    ]
+    for candidate in candidates:
+        try:
+            return ImageFont.truetype(candidate, size)
+        except (OSError, IOError):
+            continue
+    try:
+        return ImageFont.load_default(size=size)
+    except TypeError:
+        return ImageFont.load_default()
+
+
 def draw_annotations(image: Image.Image, prediction) -> Image.Image:
-    """Draw uncluttered lesion boxes and a compact legend on the fundus image."""
+    """Draw uncluttered lesion boxes and a clearly readable legend on the fundus image."""
     annotated = image.copy().convert("RGB")
     draw = ImageDraw.Draw(annotated)
+    ref_dim = min(annotated.width, annotated.height)
+    box_width = max(2, round(ref_dim * 0.0025))
+
     for box in prediction.boxes:
         class_id = int(box.cls[0].item())
         if class_id in CLASS_INFO:
             coordinates = [round(value) for value in box.xyxy[0].tolist()]
-            draw.rectangle(coordinates, outline=CLASS_INFO[class_id]["color"], width=3)
+            draw.rectangle(coordinates, outline=CLASS_INFO[class_id]["color"], width=box_width)
 
-    padding = 12
-    row_height = 24
-    legend_width = 205
-    legend_height = padding * 2 + row_height * len(CLASS_INFO)
-    left = annotated.width - legend_width - 12
-    top = 12
-    draw.rectangle((left, top, annotated.width - 12, top + legend_height), fill=(255, 255, 255))
+    # Scale legend elements compactly to sit within the black corner background
+    font_size = max(16, int(ref_dim * 0.021))
+    font = _load_legend_font(font_size)
+
+    # Display symptom names only without abbreviations
+    legend_labels = [info["name"] for info in CLASS_INFO.values()]
+    max_label_width = max(
+        (draw.textbbox((0, 0), label, font=font)[2] - draw.textbbox((0, 0), label, font=font)[0])
+        for label in legend_labels
+    )
+
+    padding_x = max(10, int(font_size * 0.45))
+    padding_y = max(8, int(font_size * 0.35))
+    dot_radius = max(5, int(font_size * 0.26))
+    marker_gap = max(6, int(font_size * 0.30))
+    row_spacing = max(4, int(font_size * 0.20))
+    row_height = font_size + row_spacing
+
+    legend_width = padding_x * 2 + dot_radius * 2 + marker_gap + max_label_width
+    legend_height = padding_y * 2 + (len(CLASS_INFO) - 1) * row_height + font_size
+
+    margin = max(6, int(ref_dim * 0.008))
+    right = annotated.width - margin
+    left = max(margin, right - legend_width)
+    top = margin
+    bottom = top + legend_height
+
+    card_radius = max(6, int(font_size * 0.25))
+    card_border_width = max(1, int(font_size * 0.05))
+    dot_border = 1
+
+    # Clean white background card with slate border
+    draw.rounded_rectangle(
+        (left, top, right, bottom),
+        radius=card_radius,
+        fill=(255, 255, 255),
+        outline=(203, 213, 225),
+        width=card_border_width,
+    )
+
     for row, info in enumerate(CLASS_INFO.values()):
-        y = top + padding + row * row_height + 5
-        draw.rectangle((left + padding, y, left + padding + 14, y + 14), fill=info["color"])
-        draw.text((left + padding + 23, y - 2), f'{info["short"]} - {info["name"]}', fill=(25, 35, 45))
+        center_x = left + padding_x + dot_radius
+        center_y = top + padding_y + row * row_height + font_size // 2
+
+        # Draw colored marker dot
+        draw.ellipse(
+            (center_x - dot_radius, center_y - dot_radius, center_x + dot_radius, center_y + dot_radius),
+            fill=info["color"],
+            outline=(51, 65, 85),
+            width=dot_border,
+        )
+
+        # Draw symptom name text
+        text_x = center_x + dot_radius + marker_gap
+        try:
+            draw.text((text_x, center_y), info["name"], fill=(15, 23, 42), font=font, anchor="lm")
+        except TypeError:
+            bbox = draw.textbbox((0, 0), info["name"], font=font)
+            text_h = bbox[3] - bbox[1]
+            draw.text((text_x, center_y - text_h // 2 - bbox[1]), info["name"], fill=(15, 23, 42), font=font)
+
     return annotated
 
 

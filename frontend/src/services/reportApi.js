@@ -37,13 +37,18 @@ export async function createReport({ image, classification, lesions, guidance, g
     },
     metadata: {
       generated_at: new Date().toISOString(),
+      report_date: new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
       model: 'RetinaIQ CNN + YOLO26 analysis pipeline',
       profile: Object.fromEntries(
         Object.entries({
           full_name: profile?.fullName,
+          age: profile?.age,
+          sex: profile?.sex,
+          dob: profile?.dob || profile?.dateOfBirth,
           email: profile?.email,
-          phone: profile?.phone,
-          date_of_birth: profile?.dateOfBirth,
+          contact_no: profile?.contactNo || profile?.phone,
+          address: profile?.address,
+          blood_group: profile?.bloodGroup,
         }).filter(([, value]) => value !== undefined && value !== null && String(value).trim() !== ''),
       ),
     },

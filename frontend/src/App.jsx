@@ -5,6 +5,7 @@ import Navbar from './components/Navbar';
 import ProtectedRoute from './components/ProtectedRoute';
 import { AnalysisProvider } from './context/AnalysisContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import Assistant from './pages/Assistant';
 import Classification from './pages/Classification';
 import GradCAM from './pages/GradCAM';
 import Home from './pages/Home';
@@ -20,6 +21,7 @@ function AppShell() {
   const { isAuthenticated, isAuthLoading } = useAuth();
   const location = useLocation();
   const isAuthPage = ['/login', '/register'].includes(location.pathname);
+  const isAssistantPage = location.pathname === '/assistant';
 
   if (isAuthLoading) {
     return <main className="min-h-screen bg-slate-50" />;
@@ -90,6 +92,14 @@ function AppShell() {
             }
           />
           <Route
+            path="/assistant"
+            element={
+              <ProtectedRoute>
+                <Assistant />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/report/:analysisId"
             element={
               <ProtectedRoute>
@@ -100,7 +110,7 @@ function AppShell() {
         </Routes>
       </main>
       {!isAuthPage && <Footer />}
-      {!isAuthPage && <ChatbotWidget />}
+      {!isAuthPage && !isAssistantPage && <ChatbotWidget />}
     </>
   );
 }

@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from './AuthContext';
 import { saveAnalysis, subscribeToUserAnalyses } from '../services/analysisStore';
 import { classifyImage, detectLesions, generateGradCAM } from '../services/api';
@@ -24,6 +24,10 @@ export function AnalysisProvider({ children }) {
   const [analysisHistory, setAnalysisHistory] = useState([]);
   const [historyError, setHistoryError] = useState('');
 
+  // In-memory cache: SHA-256 hex → full analysis snapshot.
+  // Lets re-uploading the same image return the previous result instantly.
+  const analysisCache = useRef(new Map());
+
   useEffect(() => {
     if (!currentUser?.id && !currentUser?.email) {
       setAnalysisHistory([]);
@@ -47,6 +51,31 @@ export function AnalysisProvider({ children }) {
     setUploadedImage(file);
     setImageName(file.name);
     setImagePreview(previewUrl);
+
+    // --- Compute SHA-256 hash of the file bytes for cache lookup ---
+    const fileBuffer = await file.arrayBuffer();
+    const hashBuffer = await crypto.subtle.digest('SHA-256', fileBuffer);
+    const imageHash = Array.from(new Uint8Array(hashBuffer))
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('');
+
+    const cached = analysisCache.current.get(imageHash);
+    if (cached) {
+      // Restore every piece of state from the previous run — no API calls needed.
+      setClassificationResult(cached.classificationResult);
+      setLesionResult(cached.lesionResult);
+      setGradCamResults(cached.gradCamResults);
+      setGradCamCombined(cached.gradCamCombined);
+      setGradCamStatus(cached.gradCamStatus);
+      setGradCamError(cached.gradCamError);
+      setGuidanceResult(cached.guidanceResult);
+      setGuidanceStatus(cached.guidanceStatus);
+      setGuidanceError(cached.guidanceError);
+      setReportAvailable(true);
+      return;
+    }
+
+    // Fresh image — reset and run the full pipeline.
     setClassificationResult(null);
     setLesionResult(null);
     setGradCamResults([]);
@@ -67,26 +96,41 @@ export function AnalysisProvider({ children }) {
     setReportAvailable(true);
 
     const isNoDr = result.label === 'No DR' || result.title === 'No diabetic retinopathy' || result.severity === 'No DR';
+    let resolvedGuidanceResult = null;
+    let resolvedGuidanceStatus = 'idle';
+    let resolvedGuidanceError = '';
     if (isNoDr) {
-      setGuidanceResult({ tips: [], medications: [] });
-      setGuidanceStatus('not_required');
+      resolvedGuidanceResult = { tips: [], medications: [] };
+      resolvedGuidanceStatus = 'not_required';
+      setGuidanceResult(resolvedGuidanceResult);
+      setGuidanceStatus(resolvedGuidanceStatus);
     } else {
       try {
-        setGuidanceResult(await getRecoveryGuidance(result));
-        setGuidanceStatus('ready');
+        resolvedGuidanceResult = await getRecoveryGuidance(result);
+        resolvedGuidanceStatus = 'ready';
+        setGuidanceResult(resolvedGuidanceResult);
+        setGuidanceStatus(resolvedGuidanceStatus);
       } catch (error) {
-        setGuidanceStatus('error');
-        setGuidanceError(error.message || 'Educational guidance is temporarily unavailable.');
+        resolvedGuidanceStatus = 'error';
+        resolvedGuidanceError = error.message || 'Educational guidance is temporarily unavailable.';
+        setGuidanceStatus(resolvedGuidanceStatus);
+        setGuidanceError(resolvedGuidanceError);
       }
     }
 
     setGradCamStatus('generating');
     let visualization;
+    let resolvedGradCamResults = [];
+    let resolvedGradCamCombined = '';
+    let resolvedGradCamStatus = 'generating';
+    let resolvedGradCamError = '';
     try {
       visualization = await generateGradCAM(file);
     } catch (error) {
-      setGradCamStatus('error');
-      setGradCamError(error.message || 'Unable to generate the Grad-CAM visualization.');
+      resolvedGradCamStatus = 'error';
+      resolvedGradCamError = error.message || 'Unable to generate the Grad-CAM visualization.';
+      setGradCamStatus(resolvedGradCamStatus);
+      setGradCamError(resolvedGradCamError);
       throw error;
     }
     const panelDefinitions = [
@@ -95,16 +139,30 @@ export function AnalysisProvider({ children }) {
       ['attention', 'Retinal Attention Map', 'CLAHE and local-contrast retinal attention visualization.', 'attention'],
       ['feature', 'YOLO26 Feature Visualization', 'Visualization of internal model feature representations.', 'feature_visualization'],
     ];
-    setGradCamResults(
-      panelDefinitions.map(([key, title, description, resultKey]) => ({
-        key,
-        title,
-        description,
-        image: visualization.results[resultKey],
-      })),
-    );
-    setGradCamCombined(visualization.results.combined);
-    setGradCamStatus('ready');
+    resolvedGradCamResults = panelDefinitions.map(([key, title, description, resultKey]) => ({
+      key,
+      title,
+      description,
+      image: visualization.results[resultKey],
+    }));
+    resolvedGradCamCombined = visualization.results.combined;
+    resolvedGradCamStatus = 'ready';
+    setGradCamResults(resolvedGradCamResults);
+    setGradCamCombined(resolvedGradCamCombined);
+    setGradCamStatus(resolvedGradCamStatus);
+
+    // Store this run in the frontend cache.
+    analysisCache.current.set(imageHash, {
+      classificationResult: result,
+      lesionResult: lesions.result,
+      gradCamResults: resolvedGradCamResults,
+      gradCamCombined: resolvedGradCamCombined,
+      gradCamStatus: resolvedGradCamStatus,
+      gradCamError: resolvedGradCamError,
+      guidanceResult: resolvedGuidanceResult,
+      guidanceStatus: resolvedGuidanceStatus,
+      guidanceError: resolvedGuidanceError,
+    });
 
     if (currentUser?.id || currentUser?.email) {
       saveAnalysis({

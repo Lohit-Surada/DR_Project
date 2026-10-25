@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Bell, ChevronDown, CircleUserRound, FileClock, LayoutDashboard, LogOut, Menu, ScanLine, Stethoscope, X } from 'lucide-react';
+import { Bell, Bot, ChevronDown, CircleUserRound, FileClock, LayoutDashboard, LogOut, Menu, ScanLine, Stethoscope, X } from 'lucide-react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
@@ -17,6 +17,7 @@ export default function Navbar() {
     ? [
         { to: '/home', label: 'Dashboard', icon: LayoutDashboard },
         { to: '/home#upload-section', label: 'Analyze', icon: ScanLine },
+        { to: '/assistant', label: 'Chatbot Assistant', icon: Bot },
         { to: '/history', label: 'History', icon: FileClock },
         { to: '/how-it-works', label: 'How It Works', icon: Stethoscope },
       ]

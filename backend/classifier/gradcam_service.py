@@ -269,13 +269,21 @@ def generate_visualization(uploaded_file, media_root):
     feature_rgb = cv2.cvtColor(feature_bgr, cv2.COLOR_BGR2RGB)
 
     panel_width = FINAL_WIDTH // 4
-    panels = [
-        _add_title(cv2.resize(original_rgb, (panel_width, FINAL_HEIGHT), interpolation=cv2.INTER_AREA), '1. INPUT FUNDUS'),
-        _add_title(cv2.resize(gradcam_rgb, (panel_width, FINAL_HEIGHT), interpolation=cv2.INTER_AREA), '2. TRUE YOLO26 GRAD-CAM'),
-        _add_title(cv2.resize(attention_rgb, (panel_width, FINAL_HEIGHT), interpolation=cv2.INTER_AREA), '3. RETINAL ATTENTION MAP'),
-        _add_title(cv2.resize(feature_rgb, (FINAL_WIDTH - 3 * panel_width, FINAL_HEIGHT), interpolation=cv2.INTER_AREA), '4. YOLO26 FEATURE VISUALIZATION'),
+    # Clean panels (no title bar) — used for individual PDF report images
+    clean_panels = [
+        cv2.resize(original_rgb, (panel_width, FINAL_HEIGHT), interpolation=cv2.INTER_AREA),
+        cv2.resize(gradcam_rgb, (panel_width, FINAL_HEIGHT), interpolation=cv2.INTER_AREA),
+        cv2.resize(attention_rgb, (panel_width, FINAL_HEIGHT), interpolation=cv2.INTER_AREA),
+        cv2.resize(feature_rgb, (FINAL_WIDTH - 3 * panel_width, FINAL_HEIGHT), interpolation=cv2.INTER_AREA),
     ]
-    combined = np.hstack(panels)
+    # Titled panels — used only for the combined strip (web UI reference)
+    titled_panels = [
+        _add_title(clean_panels[0], '1. INPUT FUNDUS'),
+        _add_title(clean_panels[1], '2. TRUE YOLO26 GRAD-CAM'),
+        _add_title(clean_panels[2], '3. RETINAL ATTENTION MAP'),
+        _add_title(clean_panels[3], '4. YOLO26 FEATURE VISUALIZATION'),
+    ]
+    combined = np.hstack(titled_panels)
 
     filenames = [
         '01_INPUT_FUNDUS.png',
@@ -283,7 +291,8 @@ def generate_visualization(uploaded_file, media_root):
         '03_RETINAL_ATTENTION.png',
         '04_YOLO26_FEATURE_VISUALIZATION.png',
     ]
-    for panel, filename in zip(panels, filenames):
+    # Write individual panels WITHOUT title bar for clean PDF rendering
+    for panel, filename in zip(clean_panels, filenames):
         cv2.imwrite(str(output_dir / filename), cv2.cvtColor(panel, cv2.COLOR_RGB2BGR))
     combined_filename = 'FINAL_4_PANEL_YOLO26_VISUALIZATION.png'
     cv2.imwrite(str(output_dir / combined_filename), cv2.cvtColor(combined, cv2.COLOR_RGB2BGR))

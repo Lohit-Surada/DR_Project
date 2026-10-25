@@ -29,18 +29,57 @@ const getAuthErrorMessage = (error) => {
   return messages[error.code] || error.message || 'Authentication failed. Please try again.';
 };
 
-const profileFromFirebaseUser = (firebaseUser, profile = {}) => ({
-  id: firebaseUser.uid,
-  fullName: profile.fullName || firebaseUser.displayName || '',
-  email: firebaseUser.email || '',
-  dateOfBirth: profile.dateOfBirth || '',
-  phone: profile.phone || firebaseUser.phoneNumber || '',
-  createdAt: profile.createdAt || firebaseUser.metadata.creationTime || new Date().toISOString(),
-});
+const localProfileKey = (userId) => `retinaiq-profile:${String(userId)}`;
+
+function readLocalProfile(userId) {
+  if (!userId) return {};
+  try {
+    return JSON.parse(window.localStorage.getItem(localProfileKey(userId)) || '{}');
+  } catch {
+    return {};
+  }
+}
+
+function writeLocalProfile(userId, profile) {
+  if (!userId) return;
+  try {
+    const existing = readLocalProfile(userId);
+    window.localStorage.setItem(localProfileKey(userId), JSON.stringify({ ...existing, ...profile }));
+  } catch {
+    // Local storage error handling
+  }
+}
+
+const profileFromFirebaseUser = (firebaseUser, profile = {}) => {
+  const local = firebaseUser ? readLocalProfile(firebaseUser.uid) : {};
+  const merged = { ...local, ...profile };
+  return {
+    id: firebaseUser ? firebaseUser.uid : '',
+    fullName: merged.fullName || firebaseUser?.displayName || '',
+    email: firebaseUser?.email || merged.email || '',
+    dateOfBirth: merged.dateOfBirth || merged.dob || '',
+    dob: merged.dob || merged.dateOfBirth || '',
+    phone: merged.phone || merged.contactNo || firebaseUser?.phoneNumber || '',
+    contactNo: merged.contactNo || merged.phone || firebaseUser?.phoneNumber || '',
+    age: merged.age !== undefined && merged.age !== null ? String(merged.age) : '',
+    sex: merged.sex || merged.gender || '',
+    address: merged.address || '',
+    bloodGroup: merged.bloodGroup || '',
+    createdAt: merged.createdAt || firebaseUser?.metadata?.creationTime || new Date().toISOString(),
+  };
+};
 
 async function getUserProfile(firebaseUser) {
-  const snapshot = await getDoc(doc(firestore, 'users', firebaseUser.uid));
-  return profileFromFirebaseUser(firebaseUser, snapshot.exists() ? snapshot.data() : {});
+  const localProfile = readLocalProfile(firebaseUser.uid);
+  try {
+    const snapshot = await getDoc(doc(firestore, 'users', firebaseUser.uid));
+    const remoteData = snapshot.exists() ? snapshot.data() : {};
+    const merged = { ...localProfile, ...remoteData };
+    writeLocalProfile(firebaseUser.uid, merged);
+    return profileFromFirebaseUser(firebaseUser, merged);
+  } catch (error) {
+    return profileFromFirebaseUser(firebaseUser, localProfile);
+  }
 }
 
 export function AuthProvider({ children }) {
@@ -73,16 +112,24 @@ export function AuthProvider({ children }) {
   const register = useCallback(async (payload) => {
     try {
       const result = await createUserWithEmailAndPassword(auth, payload.email.trim(), payload.password);
-      await updateProfile(result.user, { displayName: payload.fullName.trim() });
-      await setDoc(doc(firestore, 'users', result.user.uid), {
+      if (payload.fullName?.trim()) {
+        await updateProfile(result.user, { displayName: payload.fullName.trim() }).catch(() => {});
+      }
+      const initialProfile = {
         fullName: payload.fullName.trim(),
         email: result.user.email,
         dateOfBirth: payload.dateOfBirth || '',
         phone: payload.phone || '',
+      };
+      writeLocalProfile(result.user.uid, initialProfile);
+      await setDoc(doc(firestore, 'users', result.user.uid), {
+        ...initialProfile,
         createdAt: serverTimestamp(),
+      }).catch((err) => {
+        console.warn('Firestore user doc init note:', err.message);
       });
       await signOut(auth);
-      return profileFromFirebaseUser(result.user, payload);
+      return profileFromFirebaseUser(result.user, initialProfile);
     } catch (error) {
       throw new Error(getAuthErrorMessage(error));
     }
@@ -93,22 +140,52 @@ export function AuthProvider({ children }) {
     setCurrentUser(null);
   }, []);
 
-  const updateUser = useCallback((updatedUser) => {
+  const updateUser = useCallback(async (updatedUser) => {
     const firebaseUser = auth.currentUser;
-    if (!firebaseUser) {
-      return Promise.reject(new Error('You must be signed in to update your profile.'));
+    const userId = firebaseUser?.uid || updatedUser?.id || currentUser?.id || 'anonymous';
+
+    const payload = {
+      fullName: updatedUser.fullName !== undefined ? updatedUser.fullName : (currentUser?.fullName || ''),
+      email: firebaseUser?.email || updatedUser.email || currentUser?.email || '',
+      dateOfBirth: updatedUser.dateOfBirth || updatedUser.dob || currentUser?.dateOfBirth || '',
+      dob: updatedUser.dob || updatedUser.dateOfBirth || currentUser?.dob || '',
+      phone: updatedUser.phone || updatedUser.contactNo || currentUser?.phone || '',
+      contactNo: updatedUser.contactNo || updatedUser.phone || currentUser?.contactNo || '',
+      age: updatedUser.age !== undefined && updatedUser.age !== null ? String(updatedUser.age) : (currentUser?.age || ''),
+      sex: updatedUser.sex !== undefined ? updatedUser.sex : (currentUser?.sex || ''),
+      address: updatedUser.address !== undefined ? updatedUser.address : (currentUser?.address || ''),
+      bloodGroup: updatedUser.bloodGroup !== undefined ? updatedUser.bloodGroup : (currentUser?.bloodGroup || ''),
+    };
+
+    // 1. Immediately persist to localStorage
+    writeLocalProfile(userId, payload);
+
+    // 2. Immediately update state
+    const mergedUser = {
+      ...currentUser,
+      ...updatedUser,
+      ...payload,
+      id: userId,
+      email: firebaseUser?.email || updatedUser.email || currentUser?.email || '',
+    };
+    setCurrentUser(mergedUser);
+
+    // 3. Sync to Firebase in background without throwing errors if rules block it
+    if (firebaseUser) {
+      try {
+        if (payload.fullName) {
+          updateProfile(firebaseUser, { displayName: payload.fullName }).catch(() => {});
+        }
+        setDoc(doc(firestore, 'users', firebaseUser.uid), payload, { merge: true }).catch((err) => {
+          console.warn('Remote Firestore sync note (local profile preserved):', err.message);
+        });
+      } catch (err) {
+        console.warn('Profile background sync note:', err);
+      }
     }
 
-    return Promise.all([
-      updateProfile(firebaseUser, { displayName: updatedUser.fullName }),
-      setDoc(doc(firestore, 'users', firebaseUser.uid), {
-        fullName: updatedUser.fullName,
-        email: firebaseUser.email,
-        dateOfBirth: updatedUser.dateOfBirth || '',
-        phone: updatedUser.phone || '',
-      }, { merge: true }),
-    ]).then(() => setCurrentUser({ ...updatedUser, id: firebaseUser.uid, email: firebaseUser.email }));
-  }, []);
+    return mergedUser;
+  }, [currentUser]);
 
   const value = useMemo(
     () => ({

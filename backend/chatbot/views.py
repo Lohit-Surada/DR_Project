@@ -57,6 +57,9 @@ def chat(request):
     except json.JSONDecodeError:
         return _cors(_error('Send a valid JSON request.', 400))
     message = str(payload.get('message', '')).strip()
+    classification = payload.get('classification')
+    if not message and classification:
+        message = 'Please provide recovery guidance based on my classification.'
     if not message or len(message) > MAX_MESSAGE_LENGTH:
         return _cors(_error(f'Your message must be between 1 and {MAX_MESSAGE_LENGTH} characters.', 400))
     conversation_id = payload.get('conversation_id')
@@ -70,7 +73,7 @@ def chat(request):
     category = classify_topic(message, [item['content'] for item in history])
     started_at = time.perf_counter()
     try:
-        response = answer(message, history, category)
+        response = answer(message, history, category, classification=classification)
         ChatMessage.objects.create(conversation=conversation, role='user', content=message, category=category)
         ChatMessage.objects.create(conversation=conversation, role='assistant', content=response, category=category)
     except Exception:

@@ -1,6 +1,9 @@
+import hashlib
 import json
 import logging
 import time
+from collections import OrderedDict
+from threading import Lock
 
 from django.conf import settings
 from django.http import JsonResponse
@@ -13,6 +16,32 @@ from .lesion_service import generate_lesion_detection
 
 
 LOGGER = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Simple in-memory LRU cache for classification results.
+# Keyed by MD5 of the raw image bytes so identical image uploads avoid
+# repeating redundant model inference.
+# ---------------------------------------------------------------------------
+_CLASSIFY_CACHE: OrderedDict = OrderedDict()
+_CLASSIFY_CACHE_LOCK = Lock()
+_CLASSIFY_CACHE_MAX = 128
+
+
+def _cache_get(key):
+    with _CLASSIFY_CACHE_LOCK:
+        if key in _CLASSIFY_CACHE:
+            _CLASSIFY_CACHE.move_to_end(key)  # mark as recently used
+            return _CLASSIFY_CACHE[key]
+    return None
+
+
+def _cache_set(key, value):
+    with _CLASSIFY_CACHE_LOCK:
+        _CLASSIFY_CACHE[key] = value
+        _CLASSIFY_CACHE.move_to_end(key)
+        if len(_CLASSIFY_CACHE) > _CLASSIFY_CACHE_MAX:
+            _CLASSIFY_CACHE.popitem(last=False)  # evict oldest
+
 
 
 def add_cors_headers(response):
@@ -39,14 +68,25 @@ def classify(request):
     if uploaded_file.size > 12 * 1024 * 1024:
         return add_cors_headers(JsonResponse({'error': 'That image is larger than 12 MB. Choose a smaller file and try again.'}, status=413))
 
+    # Compute MD5 of image bytes for cache lookup.
+    image_bytes = uploaded_file.read()
+    image_hash = hashlib.md5(image_bytes).hexdigest()  # noqa: S324 (non-security use)
+    uploaded_file.seek(0)  # reset so classify_image can read the file
+
+    cached = _cache_get(image_hash)
+    if cached is not None:
+        LOGGER.debug('classify: cache hit for image hash %s', image_hash)
+        return add_cors_headers(JsonResponse({**cached, 'cached': True}))
+
     try:
         result = classify_image(uploaded_file)
     except FileNotFoundError:
         LOGGER.exception('DR classification model is unavailable.')
-        return add_cors_headers(JsonResponse({'error': 'The DR classification model is unavailable. Restore best_aptos_cnn.keras in the backend model folder.'}, status=503))
+        return add_cors_headers(JsonResponse({'error': 'The DR classification model is unavailable. Restore efficientnet_b0_aptos_best.pth in the backend model folder.'}, status=503))
     except (OSError, ValueError):
         return add_cors_headers(JsonResponse({'error': 'That file could not be read as an image. Try another retinal photograph.'}, status=400))
 
+    _cache_set(image_hash, result)
     return add_cors_headers(JsonResponse(result))
 
 
