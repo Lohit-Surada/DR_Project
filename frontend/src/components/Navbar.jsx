@@ -45,13 +45,13 @@ export default function Navbar() {
           </div>
         </Link>
 
-        <div className="hidden items-center gap-2 md:flex">
+        <div className="hidden items-center gap-1 md:flex lg:gap-2">
           {links.map(({ to, label, icon: Icon }) => (
             <NavLink
               key={label}
               to={to}
               className={({ isActive }) =>
-                `inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition ${
+                `inline-flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs font-medium transition lg:gap-2 lg:px-3.5 lg:py-2 lg:text-sm ${
                   isActive || (label === 'Analyze' && location.pathname.startsWith('/analysis'))
                     ? 'bg-sky-50 text-[#1677FF] ring-1 ring-sky-200'
                     : 'text-slate-600 hover:bg-slate-50 hover:text-[#0F2747]'
@@ -63,8 +63,27 @@ export default function Navbar() {
             </NavLink>
           ))}
 
-          {isAuthenticated && <NavLink to="/profile" className="ml-3 inline-flex items-center gap-2 border-l border-slate-200 pl-4 text-sm font-semibold text-[#0F2747] hover:text-[#1677FF]"><CircleUserRound className="h-5 w-5 text-sky-600" aria-hidden="true" />{currentUser?.fullName?.split(' ')[0] || 'Profile'}<ChevronDown className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" /></NavLink>}
-          {isAuthenticated && <button type="button" onClick={handleLogout} className="ml-2 rounded-lg p-2 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600" aria-label="Log out" title="Log out"><LogOut className="h-4 w-4" aria-hidden="true" /></button>}
+          {isAuthenticated && (
+            <NavLink
+              to="/profile"
+              className="ml-1 inline-flex items-center gap-1.5 border-l border-slate-200 pl-2.5 text-xs font-semibold text-[#0F2747] hover:text-[#1677FF] lg:ml-3 lg:gap-2 lg:pl-4 lg:text-sm"
+            >
+              <CircleUserRound className="h-4 w-4 text-sky-600 lg:h-5 lg:w-5" aria-hidden="true" />
+              <span className="max-w-[80px] truncate lg:max-w-none">{currentUser?.fullName?.split(' ')[0] || 'Profile'}</span>
+              <ChevronDown className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" />
+            </NavLink>
+          )}
+          {isAuthenticated && (
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="ml-1 rounded-lg p-1.5 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600 lg:ml-2 lg:p-2"
+              aria-label="Log out"
+              title="Log out"
+            >
+              <LogOut className="h-4 w-4" aria-hidden="true" />
+            </button>
+          )}
         </div>
 
         <div className="flex items-center gap-3 md:hidden">
